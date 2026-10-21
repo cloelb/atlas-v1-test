@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createMission,emptyAtlas,markStep,isUnlocked,progress,addJournal,normalizedAtlas,seasonForDate} from '../src/model.mjs';
+const create=mode=>createMission({title:'Mission de test',reason:'Essayer',territory:'corps',mode,steps:['Découvrir','Essayer','Apprendre']});
+test('mission guidée verrouille les étapes suivantes',()=>{const m=create('guided');assert.equal(isUnlocked(m,0),true);assert.equal(isUnlocked(m,1),false);});
+test('mission libre laisse choisir les étapes',()=>{const m=create('free');assert.equal(isUnlocked(m,2),true);});
+test('une étape validée déverrouille la suivante',()=>{const m=create('guided'),atlas={...emptyAtlas(),missions:[m]};const updated=markStep(atlas,m.id,m.steps[0].id,true);assert.equal(isUnlocked(updated.missions[0],1),true);assert.equal(progress(updated.missions[0]).done,1);assert.equal(progress(m).done,0);});
+test('double validation ne crée pas deux événements',()=>{const m=create('guided'),a={...emptyAtlas(),missions:[m]};const b=markStep(a,m.id,m.steps[0].id,true),c=markStep(b,m.id,m.steps[0].id,true);assert.equal(c.events.length,1);});
+test('on ne peut pas franchir une étape verrouillée',()=>{const m=create('guided'),a={...emptyAtlas(),missions:[m]};assert.throws(()=>markStep(a,m.id,m.steps[2].id,true),/verrouillée/);});
+test('annuler une étape efface sa date de fin',()=>{const m=create('guided'),a={...emptyAtlas(),missions:[m]};const b=markStep(a,m.id,m.steps[0].id,true),c=markStep(b,m.id,m.steps[0].id,false);assert.equal(c.missions[0].steps[0].doneAt,null);assert.equal(c.missions[0].completedAt,null);});
+test('rouvrir une ancienne étape guidée demande confirmation',()=>{const m=create('guided');let a={...emptyAtlas(),missions:[m]};a=markStep(a,m.id,m.steps[0].id,true);a=markStep(a,m.id,m.steps[1].id,true);assert.throws(()=>markStep(a,m.id,m.steps[0].id,false),/CONFIRM/);const b=markStep(a,m.id,m.steps[0].id,false,true);assert.equal(progress(b.missions[0]).done,0);});
+test('mission terminée possède une date puis la perd si étape rouverte',()=>{const m=create('free');let a={...emptyAtlas(),missions:[m]};for(const s of m.steps)a=markStep(a,m.id,s.id,true);assert.ok(a.missions[0].completedAt);a=markStep(a,m.id,m.steps[1].id,false);assert.equal(a.missions[0].completedAt,null);});
+test('carnet ajoute une trace avec son émotion',()=>{const a=addJournal(emptyAtlas(),{text:'Une découverte',emotion:'Fière'});assert.equal(a.journal[0].emotion,'Fière');});
+test('un atlas importé inconnu est normalisé',()=>{assert.deepEqual(normalizedAtlas(null),emptyAtlas());});
+test('saison adaptée en octobre et janvier',()=>{assert.equal(seasonForDate(new Date(2026,9,21)),'automne');assert.equal(seasonForDate(new Date(2026,0,5)),'hiver');});
+test('mission vide refusée',()=>assert.throws(()=>createMission({title:'A',territory:'corps',mode:'guided',steps:[]}),/titre/));
